@@ -1,0 +1,15 @@
+version: "3.8"
+
+services:
+  mysql:
+    image: mysql:5.7
+    environment:
+      MYSQL_ROOT_PASSWORD: 123456
+      MYSQL_USER: isucon
+      MYSQL_PASSWORD: isucon
+      MYSQL_DATABASE: isuumo
+    volumes:
+      - "./mysql/conf/my.cnf:/etc/mysql/conf.d/my.cnf"
+      - "./mysql/conf/mysqld.cnf:/etc/mysql/mysql.conf.d/mysqld.cnf"
+      - "./mysql/log:/var/log/mysql"
+    network_mode: host
