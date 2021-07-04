@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	_ "net/http/pprof"
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
@@ -239,6 +240,9 @@ func init() {
 }
 
 func main() {
+	// pprof
+	go http.ListenAndServe("127.0.0.1:9090", nil)
+
 	// Echo instance
 	e := echo.New()
 	e.Debug = true

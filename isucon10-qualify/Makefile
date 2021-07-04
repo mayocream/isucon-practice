@@ -1,8 +1,9 @@
-prepare: 
-	wget https://github.com/mayocream/isucon-static/raw/master/isucon10-qualify/bench.tar.gz -O bench.tar.gz
-	wget https://github.com/mayocream/isucon-static/raw/master/isucon10-qualify/webapp.tar.gz -O webapp.tar.gz
-	tar zxvf bench.tar.gz
-	tar zxvf webapp.tar.gz
-	cp webapp/mysql/db/* mysql/migration/
+clean:
+	rm -rf ./lib ./webapp
+
+lib: 
+	apt update && apt install -y python-pip python3-pip
+	git clone --depth 1 https://github.com/isucon/isucon10-qualify.git ./lib
+	cd lib/initial-data && pip3 install -r requirements.txt && go get github.com/orisano/wayt && make chair_data && make estate_data
 	cp webapp/fixture/* fixture/
-	rm -rf bench.tar.gz webapp.tar.gz
+	cp webapp/db/* mysql/migration/
