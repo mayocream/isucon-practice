@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/labstack/echo"
@@ -635,6 +636,8 @@ func searchRecommendedEstateWithChair(c echo.Context) error {
 }
 
 func searchEstateNazotte(c echo.Context) error {
+    start := time.Now()
+
 	coordinates := Coordinates{}
 	err := c.Bind(&coordinates)
 	if err != nil {
@@ -645,6 +648,12 @@ func searchEstateNazotte(c echo.Context) error {
 	if len(coordinates.Coordinates) == 0 {
 		return c.NoContent(http.StatusBadRequest)
 	}
+
+    // debug, TODO remove
+    defer func() {
+        duration := time.Since(start)
+        logger.With("params", coordinates).Infof("request: post search estate nazotte, duration: %s", duration.String())
+    }()
 
 	b := coordinates.getBoundingBox()
 	estatesInBoundingBox := []Estate{}

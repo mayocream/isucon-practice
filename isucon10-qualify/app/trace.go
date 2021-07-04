@@ -7,7 +7,12 @@ import (
 	"runtime/trace"
 )
 
-func traces(w http.ResponseWriter, r *http.Request) {
+func init() {
+	http.HandleFunc("/traceStart", traceStart)
+	http.HandleFunc("/traceStop", traceStop)
+}
+
+func traceStart(w http.ResponseWriter, r *http.Request) {
 	f, err := os.Create("trace.out")
 	if err != nil {
 		panic(err)
