@@ -74,7 +74,7 @@ func initialize(c echo.Context) error {
 	sqlDir := filepath.Join("..", "mysql", "db")
 	paths := []string{
 		filepath.Join(sqlDir, "0_Schema.sql"),
-        "0_Index.sql",
+        filepath.Join(".", "0_Index.sql"),
 		filepath.Join(sqlDir, "1_DummyEstateData.sql"),
 		filepath.Join(sqlDir, "2_DummyChairData.sql"),
 	}
@@ -265,8 +265,8 @@ func searchChairs(c echo.Context) error {
 
 	if c.QueryParam("features") != "" {
 		for _, f := range strings.Split(c.QueryParam("features"), ",") {
-			conditions = append(conditions, "features LIKE '%?%'")
-            // conditions = append(conditions, "features LIKE CONCAT('%', ?, '%')")
+			// conditions = append(conditions, "features LIKE '%?%'")
+            conditions = append(conditions, "features LIKE CONCAT('%', ?, '%')")
 			params = append(params, f)
 		}
 	}
@@ -536,8 +536,8 @@ func searchEstates(c echo.Context) error {
 
 	if c.QueryParam("features") != "" {
 		for _, f := range strings.Split(c.QueryParam("features"), ",") {
-            conditions = append(conditions, "features like '%?%'")
-			// conditions = append(conditions, "features like concat('%', ?, '%')")
+            // conditions = append(conditions, "features like '%?%'")
+			conditions = append(conditions, "features like concat('%', ?, '%')")
 			params = append(params, f)
 		}
 	}
