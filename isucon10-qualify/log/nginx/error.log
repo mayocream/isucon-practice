@@ -1,0 +1,4 @@
+2021/07/04 12:00:14 [warn] 20054#20054: *17525 a client request body is buffered to a temporary file /var/lib/nginx/body/0000000009, client: 172.31.45.3, server: , request: "POST /api/chair HTTP/1.1", host: "172.31.36.183"
+2021/07/04 12:00:14 [warn] 20054#20054: *17557 a client request body is buffered to a temporary file /var/lib/nginx/body/0000000010, client: 172.31.45.3, server: , request: "POST /api/estate HTTP/1.1", host: "172.31.36.183"
+2021/07/04 12:01:06 [warn] 20054#20054: *23464 a client request body is buffered to a temporary file /var/lib/nginx/body/0000000011, client: 172.31.45.3, server: , request: "POST /api/estate HTTP/1.1", host: "172.31.36.183"
+2021/07/04 12:01:06 [warn] 20054#20054: *23472 a client request body is buffered to a temporary file /var/lib/nginx/body/0000000012, client: 172.31.45.3, server: , request: "POST /api/chair HTTP/1.1", host: "172.31.36.183"

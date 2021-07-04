@@ -69,23 +69,97 @@ Tools for analyze (Installed on local server):
 
 Analyze while benchmarking:
 1. Nginx logs (getting latency of api)
+  clean nginx log first: `cat /dev/null > /var/log/nginx/access.log` 
   ```
     access_log  /var/log/nginx/access.log  main;
   ```
+  reload: `sudo nginx -s reload`
 2. MySQL Slow sql logs
   ```
     slow_query_log         = 1
     slow_query_log_file    = /var/log/mysql/mysql-slow.log
     long_query_time = 1
   ```
+  reload: `sudo systemctl restart mysql`
 3. Golang pprof
   ```
-    
+    import (
+        "net/http"
+	      _ "net/http/pprof"
+    )
+
+    func main() {
+        // pprof
+        go http.ListenAndServe("127.0.0.1:9090", nil)
+    }
   ```
 4. Golang trace
+  ```
+  package main
 
+  import (
+    "fmt"
+    "net/http"
+    "os"
+    "runtime/trace"
+  )
 
+  func init() {
+    http.HandleFunc("/traceStart", traceStart)
+    http.HandleFunc("/traceStop", traceStop)
+  }
 
+  func traces(w http.ResponseWriter, r *http.Request) {
+    f, err := os.Create("trace.out")
+    if err != nil {
+      panic(err)
+    }
+    err = trace.Start(f)
+    if err != nil {
+      panic(err)
+    }
+    w.Write([]byte("TrancStart"))
+    fmt.Println("StartTrancs")
+  }
+
+  func traceStop(w http.ResponseWriter, r *http.Request) {
+    trace.Stop()
+    w.Write([]byte("TrancStop"))
+    fmt.Println("StopTrancs")
+  }
+  ```
+
+Sync codes using SFTP in `/home/isucon/webapp/app`
+
+Change golang systemd file:
+```bash
+isucon@ip-172-31-36-183:~/isuumo/webapp/app$ cat /etc/systemd/system/isuumo.go.service
+[Unit]
+Description=isuumo.go
+
+[Service]
+WorkingDirectory=/home/isucon/isuumo/webapp/app
+EnvironmentFile=/home/isucon/env.sh
+PIDFile=/home/isucon/isuumo/webapp/go/server.pid
+
+User=isucon
+Group=isucon
+ExecStart=/home/isucon/isuumo/webapp/app/isuumo
+ExecStop=/bin/kill -s QUIT $MAINPID
+
+Restart   = always
+Type      = simple
+
+[Install]
+WantedBy=multi-user.target
+```
+
+## Profiling
+
+Do benchmark again.
+```bash
+go tool pprof http://127.0.0.1:1323/debug/pprof?debug=1
+```
 
 ## Development
 
