@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+    "github.com/kellydunn/golang-geo"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
@@ -73,6 +74,7 @@ func initialize(c echo.Context) error {
 	sqlDir := filepath.Join("..", "mysql", "db")
 	paths := []string{
 		filepath.Join(sqlDir, "0_Schema.sql"),
+        "0_Index.sql",
 		filepath.Join(sqlDir, "1_DummyEstateData.sql"),
 		filepath.Join(sqlDir, "2_DummyChairData.sql"),
 	}
@@ -263,7 +265,8 @@ func searchChairs(c echo.Context) error {
 
 	if c.QueryParam("features") != "" {
 		for _, f := range strings.Split(c.QueryParam("features"), ",") {
-			conditions = append(conditions, "features LIKE CONCAT('%', ?, '%')")
+			conditions = append(conditions, "features LIKE '%?%'")
+            // conditions = append(conditions, "features LIKE CONCAT('%', ?, '%')")
 			params = append(params, f)
 		}
 	}
@@ -533,7 +536,8 @@ func searchEstates(c echo.Context) error {
 
 	if c.QueryParam("features") != "" {
 		for _, f := range strings.Split(c.QueryParam("features"), ",") {
-			conditions = append(conditions, "features like concat('%', ?, '%')")
+            conditions = append(conditions, "features like '%?%'")
+			// conditions = append(conditions, "features like concat('%', ?, '%')")
 			params = append(params, f)
 		}
 	}
@@ -669,21 +673,32 @@ func searchEstateNazotte(c echo.Context) error {
 
 	estatesInPolygon := []Estate{}
 	for _, estate := range estatesInBoundingBox {
-		validatedEstate := Estate{}
+        // if polygon contains point, we dont need SQL
+        // ref: https://stackoverflow.com/questions/15618950/check-if-point-is-within-a-polygon
+        p := geo.NewPoint(estate.Latitude, estate.Longitude)
+        polygonPoints := make([]*geo.Point, 0, len(coordinates.Coordinates))
+        for _, co := range coordinates.Coordinates {
+            polygonPoints = append(polygonPoints, geo.NewPoint(co.Latitude, co.Longitude))
+        }
+        polygon := geo.NewPolygon(polygonPoints)
+        if polygon.Contains(p) {
+            estatesInPolygon = append(estatesInPolygon, estate)
+        }
 
-		point := fmt.Sprintf("'POINT(%f %f)'", estate.Latitude, estate.Longitude)
-		query := fmt.Sprintf(`SELECT * FROM estate WHERE id = ? AND ST_Contains(ST_PolygonFromText(%s), ST_GeomFromText(%s))`, coordinates.coordinatesToText(), point)
-		err = db.Get(&validatedEstate, query, estate.ID)
-		if err != nil {
-			if err == sql.ErrNoRows {
-				continue
-			} else {
-				logger.Errorf("db access is failed on executing validate if estate is in polygon : %v", err)
-				return c.NoContent(http.StatusInternalServerError)
-			}
-		} else {
-			estatesInPolygon = append(estatesInPolygon, validatedEstate)
-		}
+		// validatedEstate := Estate{}
+		// point := fmt.Sprintf("'POINT(%f %f)'", estate.Latitude, estate.Longitude)
+		// query := fmt.Sprintf(`SELECT * FROM estate WHERE id = ? AND ST_Contains(ST_PolygonFromText(%s), ST_GeomFromText(%s))`, coordinates.coordinatesToText(), point)
+		// err = db.Get(&validatedEstate, query, estate.ID)
+		// if err != nil {
+		// 	if err == sql.ErrNoRows {
+		// 		continue
+		// 	} else {
+		// 		logger.Errorf("db access is failed on executing validate if estate is in polygon : %v", err)
+		// 		return c.NoContent(http.StatusInternalServerError)
+		// 	}
+		// } else {
+		// 	estatesInPolygon = append(estatesInPolygon, validatedEstate)
+		// }
 	}
 
 	var re EstateSearchResponse
