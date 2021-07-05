@@ -12,12 +12,16 @@ import (
     "strings"
     "time"
 
+    "github.com/gchaincl/sqlhooks/v2"
     "github.com/kellydunn/golang-geo"
-    _ "github.com/go-sql-driver/mysql"
-    "github.com/labstack/echo"
-    "github.com/labstack/echo/middleware"
-    "github.com/labstack/gommon/log"
+    "github.com/go-sql-driver/mysql"
+    "github.com/gofiber/fiber/v2"
 )
+
+// TODO debug remove
+func init() {
+    sql.Register("mysql", sqlhooks.Wrap(&mysql.MySQLDriver{}, &Hooks{}))
+}
 
 func main() {
     // pprof
@@ -25,52 +29,45 @@ func main() {
 
     initLogger()
 
-    // Echo instance
-    e := echo.New()
-    e.Debug = false
-    e.Logger.SetLevel(log.INFO)
-
-    // Middleware
-    // e.Use(middleware.Logger())
-    e.Use(middleware.Recover())
+    s := fiber.New()
 
     // Initialize
-    e.POST("/initialize", initialize)
+    s.Post("/initialize", initialize)
 
     // Chair Handler
-    e.GET("/api/chair/:id", getChairDetail)
-    e.POST("/api/chair", postChair)
-    e.GET("/api/chair/search", searchChairs)
-    e.GET("/api/chair/low_priced", getLowPricedChair)
-    e.GET("/api/chair/search/condition", getChairSearchCondition)
-    e.POST("/api/chair/buy/:id", buyChair)
+    s.GET("/api/chair/:id", getChairDetail)
+    s.POST("/api/chair", postChair)
+    s.GET("/api/chair/search", searchChairs)
+    s.GET("/api/chair/low_priced", getLowPricedChair)
+    s.GET("/api/chair/search/condition", getChairSearchCondition)
+    s.POST("/api/chair/buy/:id", buyChair)
 
     // Estate Handler
-    e.GET("/api/estate/:id", getEstateDetail)
-    e.POST("/api/estate", postEstate)
-    e.GET("/api/estate/search", searchEstates)
-    e.GET("/api/estate/low_priced", getLowPricedEstate)
-    e.POST("/api/estate/req_doc/:id", postEstateRequestDocument)
-    e.POST("/api/estate/nazotte", searchEstateNazotte)
-    e.GET("/api/estate/search/condition", getEstateSearchCondition)
-    e.GET("/api/recommended_estate/:id", searchRecommendedEstateWithChair)
+    s.GET("/api/estate/:id", getEstateDetail)
+    s.POST("/api/estate", postEstate)
+    s.GET("/api/estate/search", searchEstates)
+    s.GET("/api/estate/low_priced", getLowPricedEstate)
+    s.POST("/api/estate/req_doc/:id", postEstateRequestDocument)
+    s.POST("/api/estate/nazotte", searchEstateNazotte)
+    s.GET("/api/estate/search/condition", getEstateSearchCondition)
+    s.GET("/api/recommended_estate/:id", searchRecommendedEstateWithChair)
 
     mySQLConnectionData = NewMySQLConnectionEnv()
 
     var err error
     db, err = mySQLConnectionData.ConnectDB()
     if err != nil {
-        e.Logger.Fatalf("DB connection failed : %v", err)
+        logger.Fatalf("DB connection failed : %v", err)
     }
     db.SetMaxOpenConns(10)
     defer db.Close()
 
     // Start server
     serverPort := fmt.Sprintf(":%v", getEnv("SERVER_PORT", "1323"))
-    e.Logger.Fatal(e.Start(serverPort))
+    logger.Fatal(s.Listen(serverPort))
 }
 
-func initialize(c echo.Context) error {
+func initialize(c *fiber.Ctx) error {
     sqlDir := filepath.Join("..", "mysql", "db")
     paths := []string{
         filepath.Join(sqlDir, "0_Schema.sql"),
@@ -91,20 +88,20 @@ func initialize(c echo.Context) error {
         )
         if err := exec.Command("bash", "-c", cmdStr).Run(); err != nil {
             logger.Errorf("Initialize script error : %v", err)
-            return c.NoContent(http.StatusInternalServerError)
+            return c.SendStatus(http.StatusInternalServerError)
         }
     }
 
-    return c.JSON(http.StatusOK, InitializeResponse{
+    return c.JSON(InitializeResponse{
         Language: "go",
     })
 }
 
-func getChairDetail(c echo.Context) error {
-    id, err := strconv.Atoi(c.Param("id"))
+func getChairDetail(c *fiber.Ctx) error {
+    id, err := strconv.Atoi(c.Params("id"))
     if err != nil {
         logger.Errorf("Request parameter \"id\" parse error : %v", err)
-        return c.NoContent(http.StatusBadRequest)
+        return c.SendStatus(http.StatusBadRequest)
     }
 
     chair := Chair{}
@@ -113,40 +110,40 @@ func getChairDetail(c echo.Context) error {
     if err != nil {
         if err == sql.ErrNoRows {
             logger.Infof("requested id's chair not found : %v", id)
-            return c.NoContent(http.StatusNotFound)
+            return c.SendStatus(http.StatusNotFound)
         }
         logger.Errorf("Failed to get the chair from id : %v", err)
-        return c.NoContent(http.StatusInternalServerError)
+        return c.SendStatus(http.StatusInternalServerError)
     } else if chair.Stock <= 0 {
         logger.Infof("requested id's chair is sold out : %v", id)
-        return c.NoContent(http.StatusNotFound)
+        return c.SendStatus(http.StatusNotFound)
     }
 
-    return c.JSON(http.StatusOK, chair)
+    return c.JSON(chair)
 }
 
-func postChair(c echo.Context) error {
+func postChair(c *fiber.Ctx) error {
     header, err := c.FormFile("chairs")
     if err != nil {
         logger.Errorf("failed to get form file: %v", err)
-        return c.NoContent(http.StatusBadRequest)
+        return c.SendStatus(http.StatusBadRequest)
     }
     f, err := header.Open()
     if err != nil {
         logger.Errorf("failed to open form file: %v", err)
-        return c.NoContent(http.StatusInternalServerError)
+        return c.SendStatus(http.StatusInternalServerError)
     }
     defer f.Close()
     records, err := csv.NewReader(f).ReadAll()
     if err != nil {
         logger.Errorf("failed to read csv: %v", err)
-        return c.NoContent(http.StatusInternalServerError)
+        return c.SendStatus(http.StatusInternalServerError)
     }
 
     tx, err := db.Begin()
     if err != nil {
         logger.Errorf("failed to begin tx: %v", err)
-        return c.NoContent(http.StatusInternalServerError)
+        return c.SendStatus(http.StatusInternalServerError)
     }
     defer tx.Rollback()
     for _, row := range records {
@@ -166,30 +163,30 @@ func postChair(c echo.Context) error {
         stock := rm.NextInt()
         if err := rm.Err(); err != nil {
             logger.Errorf("failed to read record: %v", err)
-            return c.NoContent(http.StatusBadRequest)
+            return c.SendStatus(http.StatusBadRequest)
         }
         _, err := tx.Exec("INSERT INTO chair(id, name, description, thumbnail, price, height, width, depth, color, features, kind, popularity, stock) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)", id, name, description, thumbnail, price, height, width, depth, color, features, kind, popularity, stock)
         if err != nil {
             logger.Errorf("failed to insert chair: %v", err)
-            return c.NoContent(http.StatusInternalServerError)
+            return c.SendStatus(http.StatusInternalServerError)
         }
     }
     if err := tx.Commit(); err != nil {
         logger.Errorf("failed to commit tx: %v", err)
-        return c.NoContent(http.StatusInternalServerError)
+        return c.SendStatus(http.StatusInternalServerError)
     }
-    return c.NoContent(http.StatusCreated)
+    return c.SendStatus(http.StatusCreated)
 }
 
-func searchChairs(c echo.Context) error {
+func searchChairs(c *fiber.Ctx) error {
     conditions := make([]string, 0)
     params := make([]interface{}, 0)
 
-    if c.QueryParam("priceRangeId") != "" {
-        chairPrice, err := getRange(chairSearchCondition.Price, c.QueryParam("priceRangeId"))
+    if c.Query("priceRangeId") != "" {
+        chairPrice, err := getRange(chairSearchCondition.Price, c.Query("priceRangeId"))
         if err != nil {
-            logger.Infof("priceRangeID invalid, %v : %v", c.QueryParam("priceRangeId"), err)
-            return c.NoContent(http.StatusBadRequest)
+            logger.Infof("priceRangeID invalid, %v : %v", c.Query("priceRangeId"), err)
+            return c.SendStatus(http.StatusBadRequest)
         }
 
         if chairPrice.Min != -1 {
@@ -202,11 +199,11 @@ func searchChairs(c echo.Context) error {
         }
     }
 
-    if c.QueryParam("heightRangeId") != "" {
-        chairHeight, err := getRange(chairSearchCondition.Height, c.QueryParam("heightRangeId"))
+    if c.Query("heightRangeId") != "" {
+        chairHeight, err := getRange(chairSearchCondition.Height, c.Query("heightRangeId"))
         if err != nil {
-            logger.Infof("heightRangeIf invalid, %v : %v", c.QueryParam("heightRangeId"), err)
-            return c.NoContent(http.StatusBadRequest)
+            logger.Infof("heightRangeIf invalid, %v : %v", c.Query("heightRangeId"), err)
+            return c.SendStatus(http.StatusBadRequest)
         }
 
         if chairHeight.Min != -1 {
@@ -219,11 +216,11 @@ func searchChairs(c echo.Context) error {
         }
     }
 
-    if c.QueryParam("widthRangeId") != "" {
-        chairWidth, err := getRange(chairSearchCondition.Width, c.QueryParam("widthRangeId"))
+    if c.Query("widthRangeId") != "" {
+        chairWidth, err := getRange(chairSearchCondition.Width, c.Query("widthRangeId"))
         if err != nil {
-            logger.Infof("widthRangeID invalid, %v : %v", c.QueryParam("widthRangeId"), err)
-            return c.NoContent(http.StatusBadRequest)
+            logger.Infof("widthRangeID invalid, %v : %v", c.Query("widthRangeId"), err)
+            return c.SendStatus(http.StatusBadRequest)
         }
 
         if chairWidth.Min != -1 {
@@ -236,11 +233,11 @@ func searchChairs(c echo.Context) error {
         }
     }
 
-    if c.QueryParam("depthRangeId") != "" {
-        chairDepth, err := getRange(chairSearchCondition.Depth, c.QueryParam("depthRangeId"))
+    if c.Query("depthRangeId") != "" {
+        chairDepth, err := getRange(chairSearchCondition.Depth, c.Query("depthRangeId"))
         if err != nil {
-            logger.Infof("depthRangeId invalid, %v : %v", c.QueryParam("depthRangeId"), err)
-            return c.NoContent(http.StatusBadRequest)
+            logger.Infof("depthRangeId invalid, %v : %v", c.Query("depthRangeId"), err)
+            return c.SendStatus(http.StatusBadRequest)
         }
 
         if chairDepth.Min != -1 {
@@ -253,18 +250,18 @@ func searchChairs(c echo.Context) error {
         }
     }
 
-    if c.QueryParam("kind") != "" {
+    if c.Query("kind") != "" {
         conditions = append(conditions, "kind = ?")
-        params = append(params, c.QueryParam("kind"))
+        params = append(params, c.Query("kind"))
     }
 
-    if c.QueryParam("color") != "" {
+    if c.Query("color") != "" {
         conditions = append(conditions, "color = ?")
-        params = append(params, c.QueryParam("color"))
+        params = append(params, c.Query("color"))
     }
 
-    if c.QueryParam("features") != "" {
-        for _, f := range strings.Split(c.QueryParam("features"), ",") {
+    if c.Query("features") != "" {
+        for _, f := range strings.Split(c.Query("features"), ",") {
             // conditions = append(conditions, "features LIKE '%?%'")
             conditions = append(conditions, "features LIKE CONCAT('%', ?, '%')")
             params = append(params, f)
@@ -273,21 +270,21 @@ func searchChairs(c echo.Context) error {
 
     if len(conditions) == 0 {
         logger.Infof("Search condition not found")
-        return c.NoContent(http.StatusBadRequest)
+        return c.SendStatus(http.StatusBadRequest)
     }
 
     conditions = append(conditions, "stock > 0")
 
-    page, err := strconv.Atoi(c.QueryParam("page"))
+    page, err := strconv.Atoi(c.Query("page"))
     if err != nil {
         logger.Infof("Invalid format page parameter : %v", err)
-        return c.NoContent(http.StatusBadRequest)
+        return c.SendStatus(http.StatusBadRequest)
     }
 
-    perPage, err := strconv.Atoi(c.QueryParam("perPage"))
+    perPage, err := strconv.Atoi(c.Query("perPage"))
     if err != nil {
         logger.Infof("Invalid format perPage parameter : %v", err)
-        return c.NoContent(http.StatusBadRequest)
+        return c.SendStatus(http.StatusBadRequest)
     }
 
     searchQuery := "SELECT * FROM chair WHERE "
@@ -299,7 +296,7 @@ func searchChairs(c echo.Context) error {
     err = db.Get(&res.Count, countQuery+searchCondition, params...)
     if err != nil {
         logger.Errorf("searchChairs DB execution error : %v", err)
-        return c.NoContent(http.StatusInternalServerError)
+        return c.SendStatus(http.StatusInternalServerError)
     }
 
     chairs := []Chair{}
@@ -307,40 +304,40 @@ func searchChairs(c echo.Context) error {
     err = db.Select(&chairs, searchQuery+searchCondition+limitOffset, params...)
     if err != nil {
         if err == sql.ErrNoRows {
-            return c.JSON(http.StatusOK, ChairSearchResponse{Count: 0, Chairs: []Chair{}})
+            return c.JSON(ChairSearchResponse{Count: 0, Chairs: []Chair{}})
         }
         logger.Errorf("searchChairs DB execution error : %v", err)
-        return c.NoContent(http.StatusInternalServerError)
+        return c.SendStatus(http.StatusInternalServerError)
     }
 
     res.Chairs = chairs
 
-    return c.JSON(http.StatusOK, res)
+    return c.JSON(res)
 }
 
-func buyChair(c echo.Context) error {
+func buyChair(c *fiber.Ctx) error {
     m := echo.Map{}
-    if err := c.Bind(&m); err != nil {
+    if err := c.BodyParser(&m); err != nil {
         logger.Infof("post buy chair failed : %v", err)
-        return c.NoContent(http.StatusInternalServerError)
+        return c.SendStatus(http.StatusInternalServerError)
     }
 
     _, ok := m["email"].(string)
     if !ok {
         logger.Info("post buy chair failed : email not found in request body")
-        return c.NoContent(http.StatusBadRequest)
+        return c.SendStatus(http.StatusBadRequest)
     }
 
-    id, err := strconv.Atoi(c.Param("id"))
+    id, err := strconv.Atoi(c.Params("id"))
     if err != nil {
         logger.Infof("post buy chair failed : %v", err)
-        return c.NoContent(http.StatusBadRequest)
+        return c.SendStatus(http.StatusBadRequest)
     }
 
     tx, err := db.Beginx()
     if err != nil {
         logger.Errorf("failed to create transaction : %v", err)
-        return c.NoContent(http.StatusInternalServerError)
+        return c.SendStatus(http.StatusInternalServerError)
     }
     defer tx.Rollback()
 
@@ -349,52 +346,52 @@ func buyChair(c echo.Context) error {
     if err != nil {
         if err == sql.ErrNoRows {
             logger.Infof("buyChair chair id \"%v\" not found", id)
-            return c.NoContent(http.StatusNotFound)
+            return c.SendStatus(http.StatusNotFound)
         }
         logger.Errorf("DB Execution Error: on getting a chair by id : %v", err)
-        return c.NoContent(http.StatusInternalServerError)
+        return c.SendStatus(http.StatusInternalServerError)
     }
 
     _, err = tx.Exec("UPDATE chair SET stock = stock - 1 WHERE id = ?", id)
     if err != nil {
         logger.Errorf("chair stock update failed : %v", err)
-        return c.NoContent(http.StatusInternalServerError)
+        return c.SendStatus(http.StatusInternalServerError)
     }
 
     err = tx.Commit()
     if err != nil {
         logger.Errorf("transaction commit error : %v", err)
-        return c.NoContent(http.StatusInternalServerError)
+        return c.SendStatus(http.StatusInternalServerError)
     }
 
-    return c.NoContent(http.StatusOK)
+    return c.SendStatus(http.StatusOK)
 }
 
-func getChairSearchCondition(c echo.Context) error {
-    return c.JSON(http.StatusOK, chairSearchCondition)
+func getChairSearchCondition(c *fiber.Ctx) error {
+    return c.JSON(chairSearchCondition)
 }
 
-func getLowPricedChair(c echo.Context) error {
+func getLowPricedChair(c *fiber.Ctx) error {
     var chairs []Chair
     query := `SELECT * FROM chair WHERE stock > 0 ORDER BY price ASC, id ASC LIMIT ?`
     err := db.Select(&chairs, query, Limit)
     if err != nil {
         if err == sql.ErrNoRows {
             logger.Error("getLowPricedChair not found")
-            return c.JSON(http.StatusOK, ChairListResponse{[]Chair{}})
+            return c.JSON(ChairListResponse{[]Chair{}})
         }
         logger.Errorf("getLowPricedChair DB execution error : %v", err)
-        return c.NoContent(http.StatusInternalServerError)
+        return c.SendStatus(http.StatusInternalServerError)
     }
 
-    return c.JSON(http.StatusOK, ChairListResponse{Chairs: chairs})
+    return c.JSON(ChairListResponse{Chairs: chairs})
 }
 
-func getEstateDetail(c echo.Context) error {
-    id, err := strconv.Atoi(c.Param("id"))
+func getEstateDetail(c *fiber.Ctx) error {
+    id, err := strconv.Atoi(c.Params("id"))
     if err != nil {
         logger.Infof("Request parameter \"id\" parse error : %v", err)
-        return c.NoContent(http.StatusBadRequest)
+        return c.SendStatus(http.StatusBadRequest)
     }
 
     var estate Estate
@@ -402,13 +399,13 @@ func getEstateDetail(c echo.Context) error {
     if err != nil {
         if err == sql.ErrNoRows {
             logger.Infof("getEstateDetail estate id %v not found", id)
-            return c.NoContent(http.StatusNotFound)
+            return c.SendStatus(http.StatusNotFound)
         }
         logger.Errorf("Database Execution error : %v", err)
-        return c.NoContent(http.StatusInternalServerError)
+        return c.SendStatus(http.StatusInternalServerError)
     }
 
-    return c.JSON(http.StatusOK, estate)
+    return c.JSON(estate)
 }
 
 func getRange(cond RangeCondition, rangeID string) (*Range, error) {
@@ -424,28 +421,28 @@ func getRange(cond RangeCondition, rangeID string) (*Range, error) {
     return cond.Ranges[RangeIndex], nil
 }
 
-func postEstate(c echo.Context) error {
+func postEstate(c *fiber.Ctx) error {
     header, err := c.FormFile("estates")
     if err != nil {
         logger.Errorf("failed to get form file: %v", err)
-        return c.NoContent(http.StatusBadRequest)
+        return c.SendStatus(http.StatusBadRequest)
     }
     f, err := header.Open()
     if err != nil {
         logger.Errorf("failed to open form file: %v", err)
-        return c.NoContent(http.StatusInternalServerError)
+        return c.SendStatus(http.StatusInternalServerError)
     }
     defer f.Close()
     records, err := csv.NewReader(f).ReadAll()
     if err != nil {
         logger.Errorf("failed to read csv: %v", err)
-        return c.NoContent(http.StatusInternalServerError)
+        return c.SendStatus(http.StatusInternalServerError)
     }
 
     tx, err := db.Begin()
     if err != nil {
         logger.Errorf("failed to begin tx: %v", err)
-        return c.NoContent(http.StatusInternalServerError)
+        return c.SendStatus(http.StatusInternalServerError)
     }
     defer tx.Rollback()
     for _, row := range records {
@@ -464,30 +461,30 @@ func postEstate(c echo.Context) error {
         popularity := rm.NextInt()
         if err := rm.Err(); err != nil {
             logger.Errorf("failed to read record: %v", err)
-            return c.NoContent(http.StatusBadRequest)
+            return c.SendStatus(http.StatusBadRequest)
         }
         _, err := tx.Exec("INSERT INTO estate(id, name, description, thumbnail, address, latitude, longitude, rent, door_height, door_width, features, popularity) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", id, name, description, thumbnail, address, latitude, longitude, rent, doorHeight, doorWidth, features, popularity)
         if err != nil {
             logger.Errorf("failed to insert estate: %v", err)
-            return c.NoContent(http.StatusInternalServerError)
+            return c.SendStatus(http.StatusInternalServerError)
         }
     }
     if err := tx.Commit(); err != nil {
         logger.Errorf("failed to commit tx: %v", err)
-        return c.NoContent(http.StatusInternalServerError)
+        return c.SendStatus(http.StatusInternalServerError)
     }
-    return c.NoContent(http.StatusCreated)
+    return c.SendStatus(http.StatusCreated)
 }
 
-func searchEstates(c echo.Context) error {
+func searchEstates(c *fiber.Ctx) error {
     conditions := make([]string, 0)
     params := make([]interface{}, 0)
 
-    if c.QueryParam("doorHeightRangeId") != "" {
-        doorHeight, err := getRange(estateSearchCondition.DoorHeight, c.QueryParam("doorHeightRangeId"))
+    if c.Query("doorHeightRangeId") != "" {
+        doorHeight, err := getRange(estateSearchCondition.DoorHeight, c.Query("doorHeightRangeId"))
         if err != nil {
-            logger.Infof("doorHeightRangeID invalid, %v : %v", c.QueryParam("doorHeightRangeId"), err)
-            return c.NoContent(http.StatusBadRequest)
+            logger.Infof("doorHeightRangeID invalid, %v : %v", c.Query("doorHeightRangeId"), err)
+            return c.SendStatus(http.StatusBadRequest)
         }
 
         if doorHeight.Min != -1 {
@@ -500,11 +497,11 @@ func searchEstates(c echo.Context) error {
         }
     }
 
-    if c.QueryParam("doorWidthRangeId") != "" {
-        doorWidth, err := getRange(estateSearchCondition.DoorWidth, c.QueryParam("doorWidthRangeId"))
+    if c.Query("doorWidthRangeId") != "" {
+        doorWidth, err := getRange(estateSearchCondition.DoorWidth, c.Query("doorWidthRangeId"))
         if err != nil {
-            logger.Infof("doorWidthRangeID invalid, %v : %v", c.QueryParam("doorWidthRangeId"), err)
-            return c.NoContent(http.StatusBadRequest)
+            logger.Infof("doorWidthRangeID invalid, %v : %v", c.Query("doorWidthRangeId"), err)
+            return c.SendStatus(http.StatusBadRequest)
         }
 
         if doorWidth.Min != -1 {
@@ -517,11 +514,11 @@ func searchEstates(c echo.Context) error {
         }
     }
 
-    if c.QueryParam("rentRangeId") != "" {
-        estateRent, err := getRange(estateSearchCondition.Rent, c.QueryParam("rentRangeId"))
+    if c.Query("rentRangeId") != "" {
+        estateRent, err := getRange(estateSearchCondition.Rent, c.Query("rentRangeId"))
         if err != nil {
-            logger.Infof("rentRangeID invalid, %v : %v", c.QueryParam("rentRangeId"), err)
-            return c.NoContent(http.StatusBadRequest)
+            logger.Infof("rentRangeID invalid, %v : %v", c.Query("rentRangeId"), err)
+            return c.SendStatus(http.StatusBadRequest)
         }
 
         if estateRent.Min != -1 {
@@ -534,8 +531,8 @@ func searchEstates(c echo.Context) error {
         }
     }
 
-    if c.QueryParam("features") != "" {
-        for _, f := range strings.Split(c.QueryParam("features"), ",") {
+    if c.Query("features") != "" {
+        for _, f := range strings.Split(c.Query("features"), ",") {
             // conditions = append(conditions, "features like '%?%'")
             conditions = append(conditions, "features like concat('%', ?, '%')")
             params = append(params, f)
@@ -544,19 +541,19 @@ func searchEstates(c echo.Context) error {
 
     if len(conditions) == 0 {
         logger.Infof("searchEstates search condition not found")
-        return c.NoContent(http.StatusBadRequest)
+        return c.SendStatus(http.StatusBadRequest)
     }
 
-    page, err := strconv.Atoi(c.QueryParam("page"))
+    page, err := strconv.Atoi(c.Query("page"))
     if err != nil {
         logger.Infof("Invalid format page parameter : %v", err)
-        return c.NoContent(http.StatusBadRequest)
+        return c.SendStatus(http.StatusBadRequest)
     }
 
-    perPage, err := strconv.Atoi(c.QueryParam("perPage"))
+    perPage, err := strconv.Atoi(c.Query("perPage"))
     if err != nil {
         logger.Infof("Invalid format perPage parameter : %v", err)
-        return c.NoContent(http.StatusBadRequest)
+        return c.SendStatus(http.StatusBadRequest)
     }
 
     searchQuery := "SELECT * FROM estate WHERE "
@@ -568,7 +565,7 @@ func searchEstates(c echo.Context) error {
     err = db.Get(&res.Count, countQuery+searchCondition, params...)
     if err != nil {
         logger.Errorf("searchEstates DB execution error : %v", err)
-        return c.NoContent(http.StatusInternalServerError)
+        return c.SendStatus(http.StatusInternalServerError)
     }
 
     estates := []Estate{}
@@ -576,38 +573,38 @@ func searchEstates(c echo.Context) error {
     err = db.Select(&estates, searchQuery+searchCondition+limitOffset, params...)
     if err != nil {
         if err == sql.ErrNoRows {
-            return c.JSON(http.StatusOK, EstateSearchResponse{Count: 0, Estates: []Estate{}})
+            return c.JSON(EstateSearchResponse{Count: 0, Estates: []Estate{}})
         }
         logger.Errorf("searchEstates DB execution error : %v", err)
-        return c.NoContent(http.StatusInternalServerError)
+        return c.SendStatus(http.StatusInternalServerError)
     }
 
     res.Estates = estates
 
-    return c.JSON(http.StatusOK, res)
+    return c.JSON(res)
 }
 
-func getLowPricedEstate(c echo.Context) error {
+func getLowPricedEstate(c *fiber.Ctx) error {
     estates := make([]Estate, 0, Limit)
     query := `SELECT * FROM estate ORDER BY rent ASC, id ASC LIMIT ?`
     err := db.Select(&estates, query, Limit)
     if err != nil {
         if err == sql.ErrNoRows {
             logger.Error("getLowPricedEstate not found")
-            return c.JSON(http.StatusOK, EstateListResponse{[]Estate{}})
+            return c.JSON(EstateListResponse{[]Estate{}})
         }
         logger.Errorf("getLowPricedEstate DB execution error : %v", err)
-        return c.NoContent(http.StatusInternalServerError)
+        return c.SendStatus(http.StatusInternalServerError)
     }
 
-    return c.JSON(http.StatusOK, EstateListResponse{Estates: estates})
+    return c.JSON(EstateListResponse{Estates: estates})
 }
 
-func searchRecommendedEstateWithChair(c echo.Context) error {
-    id, err := strconv.Atoi(c.Param("id"))
+func searchRecommendedEstateWithChair(c *fiber.Ctx) error {
+    id, err := strconv.Atoi(c.Params("id"))
     if err != nil {
         logger.Infof("Invalid format searchRecommendedEstateWithChair id : %v", err)
-        return c.NoContent(http.StatusBadRequest)
+        return c.SendStatus(http.StatusBadRequest)
     }
 
     chair := Chair{}
@@ -616,10 +613,10 @@ func searchRecommendedEstateWithChair(c echo.Context) error {
     if err != nil {
         if err == sql.ErrNoRows {
             logger.Infof("Requested chair id \"%v\" not found", id)
-            return c.NoContent(http.StatusBadRequest)
+            return c.SendStatus(http.StatusBadRequest)
         }
         logger.Errorf("Database execution error : %v", err)
-        return c.NoContent(http.StatusInternalServerError)
+        return c.SendStatus(http.StatusInternalServerError)
     }
 
     var estates []Estate
@@ -630,27 +627,27 @@ func searchRecommendedEstateWithChair(c echo.Context) error {
     err = db.Select(&estates, query, w, h, w, d, h, w, h, d, d, w, d, h, Limit)
     if err != nil {
         if err == sql.ErrNoRows {
-            return c.JSON(http.StatusOK, EstateListResponse{[]Estate{}})
+            return c.JSON(EstateListResponse{[]Estate{}})
         }
         logger.Errorf("Database execution error : %v", err)
-        return c.NoContent(http.StatusInternalServerError)
+        return c.SendStatus(http.StatusInternalServerError)
     }
 
-    return c.JSON(http.StatusOK, EstateListResponse{Estates: estates})
+    return c.JSON(EstateListResponse{Estates: estates})
 }
 
-func searchEstateNazotte(c echo.Context) error {
+func searchEstateNazotte(c *fiber.Ctx) error {
     start := time.Now()
 
     coordinates := Coordinates{}
-    err := c.Bind(&coordinates)
+    err := c.BodyParser(&coordinates)
     if err != nil {
         logger.Infof("post search estate nazotte failed : %v", err)
-        return c.NoContent(http.StatusBadRequest)
+        return c.SendStatus(http.StatusBadRequest)
     }
 
     if len(coordinates.Coordinates) == 0 {
-        return c.NoContent(http.StatusBadRequest)
+        return c.SendStatus(http.StatusBadRequest)
     }
 
     // debug, TODO remove
@@ -665,10 +662,10 @@ func searchEstateNazotte(c echo.Context) error {
     err = db.Select(&estatesInBoundingBox, query, b.BottomRightCorner.Latitude, b.TopLeftCorner.Latitude, b.BottomRightCorner.Longitude, b.TopLeftCorner.Longitude)
     if err == sql.ErrNoRows {
         logger.Infof("select * from estate where latitude ...", err)
-        return c.JSON(http.StatusOK, EstateSearchResponse{Count: 0, Estates: []Estate{}})
+        return c.JSON(EstateSearchResponse{Count: 0, Estates: []Estate{}})
     } else if err != nil {
         logger.Errorf("database execution error : %v", err)
-        return c.NoContent(http.StatusInternalServerError)
+        return c.SendStatus(http.StatusInternalServerError)
     }
 
     estatesInPolygon := []Estate{}
@@ -694,7 +691,7 @@ func searchEstateNazotte(c echo.Context) error {
         // 		continue
         // 	} else {
         // 		logger.Errorf("db access is failed on executing validate if estate is in polygon : %v", err)
-        // 		return c.NoContent(http.StatusInternalServerError)
+        // 		return c.SendStatus(http.StatusInternalServerError)
         // 	}
         // } else {
         // 	estatesInPolygon = append(estatesInPolygon, validatedEstate)
@@ -710,26 +707,26 @@ func searchEstateNazotte(c echo.Context) error {
     }
     re.Count = int64(len(re.Estates))
 
-    return c.JSON(http.StatusOK, re)
+    return c.JSON(re)
 }
 
-func postEstateRequestDocument(c echo.Context) error {
+func postEstateRequestDocument(c *fiber.Ctx) error {
     m := echo.Map{}
-    if err := c.Bind(&m); err != nil {
+    if err := c.BodyParser(&m); err != nil {
         logger.Infof("post request document failed : %v", err)
-        return c.NoContent(http.StatusInternalServerError)
+        return c.SendStatus(http.StatusInternalServerError)
     }
 
     _, ok := m["email"].(string)
     if !ok {
         logger.Info("post request document failed : email not found in request body")
-        return c.NoContent(http.StatusBadRequest)
+        return c.SendStatus(http.StatusBadRequest)
     }
 
-    id, err := strconv.Atoi(c.Param("id"))
+    id, err := strconv.Atoi(c.Params("id"))
     if err != nil {
         logger.Infof("post request document failed : %v", err)
-        return c.NoContent(http.StatusBadRequest)
+        return c.SendStatus(http.StatusBadRequest)
     }
 
     estate := Estate{}
@@ -737,17 +734,17 @@ func postEstateRequestDocument(c echo.Context) error {
     err = db.Get(&estate, query, id)
     if err != nil {
         if err == sql.ErrNoRows {
-            return c.NoContent(http.StatusNotFound)
+            return c.SendStatus(http.StatusNotFound)
         }
         logger.Errorf("postEstateRequestDocument DB execution error : %v", err)
-        return c.NoContent(http.StatusInternalServerError)
+        return c.SendStatus(http.StatusInternalServerError)
     }
 
-    return c.NoContent(http.StatusOK)
+    return c.SendStatus(http.StatusOK)
 }
 
-func getEstateSearchCondition(c echo.Context) error {
-    return c.JSON(http.StatusOK, estateSearchCondition)
+func getEstateSearchCondition(c *fiber.Ctx) error {
+    return c.JSON(estateSearchCondition)
 }
 
 func (cs Coordinates) getBoundingBox() BoundingBox {
