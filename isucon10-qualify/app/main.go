@@ -1,21 +1,21 @@
 package main
 
 import (
-    "database/sql"
-    "encoding/csv"
-    "fmt"
-    "net/http"
-    _ "net/http/pprof"
-    "os/exec"
-    "path/filepath"
-    "strconv"
-    "strings"
-    "time"
+	"database/sql"
+	"encoding/csv"
+	"fmt"
+	"net/http"
+	_ "net/http/pprof"
+	"os/exec"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"time"
 
-    "github.com/gchaincl/sqlhooks/v2"
-    "github.com/kellydunn/golang-geo"
-    "github.com/go-sql-driver/mysql"
-    "github.com/gofiber/fiber/v2"
+	"github.com/gchaincl/sqlhooks/v2"
+	"github.com/go-sql-driver/mysql"
+	"github.com/gofiber/fiber/v2"
+	"github.com/kellydunn/golang-geo"
 )
 
 // TODO debug remove
@@ -30,27 +30,7 @@ func main() {
     initLogger()
 
     s := fiber.New()
-
-    // Initialize
-    s.Post("/initialize", initialize)
-
-    // Chair Handler
-    s.GET("/api/chair/:id", getChairDetail)
-    s.POST("/api/chair", postChair)
-    s.GET("/api/chair/search", searchChairs)
-    s.GET("/api/chair/low_priced", getLowPricedChair)
-    s.GET("/api/chair/search/condition", getChairSearchCondition)
-    s.POST("/api/chair/buy/:id", buyChair)
-
-    // Estate Handler
-    s.GET("/api/estate/:id", getEstateDetail)
-    s.POST("/api/estate", postEstate)
-    s.GET("/api/estate/search", searchEstates)
-    s.GET("/api/estate/low_priced", getLowPricedEstate)
-    s.POST("/api/estate/req_doc/:id", postEstateRequestDocument)
-    s.POST("/api/estate/nazotte", searchEstateNazotte)
-    s.GET("/api/estate/search/condition", getEstateSearchCondition)
-    s.GET("/api/recommended_estate/:id", searchRecommendedEstateWithChair)
+    routeRegister(s)
 
     mySQLConnectionData = NewMySQLConnectionEnv()
 
@@ -97,6 +77,7 @@ func initialize(c *fiber.Ctx) error {
     })
 }
 
+// TODO cache
 func getChairDetail(c *fiber.Ctx) error {
     id, err := strconv.Atoi(c.Params("id"))
     if err != nil {
@@ -122,6 +103,7 @@ func getChairDetail(c *fiber.Ctx) error {
     return c.JSON(chair)
 }
 
+// TODO cache into memory
 func postChair(c *fiber.Ctx) error {
     header, err := c.FormFile("chairs")
     if err != nil {
@@ -316,7 +298,7 @@ func searchChairs(c *fiber.Ctx) error {
 }
 
 func buyChair(c *fiber.Ctx) error {
-    m := echo.Map{}
+    m := make(map[string]interface{})
     if err := c.BodyParser(&m); err != nil {
         logger.Infof("post buy chair failed : %v", err)
         return c.SendStatus(http.StatusInternalServerError)
@@ -476,6 +458,7 @@ func postEstate(c *fiber.Ctx) error {
     return c.SendStatus(http.StatusCreated)
 }
 
+// TODO inmemory search
 func searchEstates(c *fiber.Ctx) error {
     conditions := make([]string, 0)
     params := make([]interface{}, 0)
@@ -584,6 +567,7 @@ func searchEstates(c *fiber.Ctx) error {
     return c.JSON(res)
 }
 
+// TODO cache
 func getLowPricedEstate(c *fiber.Ctx) error {
     estates := make([]Estate, 0, Limit)
     query := `SELECT * FROM estate ORDER BY rent ASC, id ASC LIMIT ?`
@@ -600,6 +584,7 @@ func getLowPricedEstate(c *fiber.Ctx) error {
     return c.JSON(EstateListResponse{Estates: estates})
 }
 
+// TODO inmemory search
 func searchRecommendedEstateWithChair(c *fiber.Ctx) error {
     id, err := strconv.Atoi(c.Params("id"))
     if err != nil {
@@ -711,7 +696,7 @@ func searchEstateNazotte(c *fiber.Ctx) error {
 }
 
 func postEstateRequestDocument(c *fiber.Ctx) error {
-    m := echo.Map{}
+    m := make(map[string]interface{})
     if err := c.BodyParser(&m); err != nil {
         logger.Infof("post request document failed : %v", err)
         return c.SendStatus(http.StatusInternalServerError)
