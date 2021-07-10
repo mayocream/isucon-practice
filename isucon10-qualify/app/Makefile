@@ -9,4 +9,4 @@ run:
 	MYSQL_PORT=13306 isuumo
 
 bench:
-	docker run --rm --network=host mayocream/isucon:10-quality-bench ./bench --target-url http://127.0.0.1:1323
+	sudo docker run --rm --network=host mayocream/isucon:10-quality-bench ./bench --target-url http://127.0.0.1:1323
