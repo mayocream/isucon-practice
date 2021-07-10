@@ -39,8 +39,11 @@ func main() {
     if err != nil {
         logger.Fatalf("DB connection failed : %v", err)
     }
-    db.SetMaxOpenConns(10)
+    // db.SetMaxOpenConns(10)
     defer db.Close()
+    if err := db.Ping(); err != nil {
+        logger.Errorf("DB Connect err: %s", err)
+    }
 
     // Start server
     serverPort := fmt.Sprintf(":%v", getEnv("SERVER_PORT", "1323"))
