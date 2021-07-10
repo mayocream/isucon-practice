@@ -12,9 +12,5 @@ services:
       - "./mysql/conf/my.cnf:/etc/mysql/conf.d/my.cnf"
       - "./mysql/conf/mysqld.cnf:/etc/mysql/mysql.conf.d/mysqld.cnf"
       - "./mysql/log:/var/log/mysql"
-    network_mode: host
-
-  bench:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    ports:
+      - "13306:3306"
