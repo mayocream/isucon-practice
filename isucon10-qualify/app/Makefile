@@ -3,7 +3,7 @@
 all: isuumo
 
 isuumo: *.go
-	/usr/local/go/bin/go build -o isuumo *.go
+	go build -o isuumo *.go
 
 run:
 	MYSQL_PORT=13306 isuumo
