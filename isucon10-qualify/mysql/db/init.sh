@@ -2,13 +2,14 @@
 set -xe
 set -o pipefail
 
-CURRENT_DIR=$(cd $(dirname $0);pwd)
-export MYSQL_HOST=${MYSQL_HOST:-127.0.0.1}
-export MYSQL_PORT=${MYSQL_PORT:-3306}
-export MYSQL_USER=${MYSQL_USER:-isucon}
-export MYSQL_DBNAME=${MYSQL_DBNAME:-isuumo}
-export MYSQL_PWD=${MYSQL_PASS:-isucon}
-export LANG="C.UTF-8"
-cd $CURRENT_DIR
+MYSQL_HOST=${MYSQL_HOST:-127.0.0.1}
+MYSQL_PORT=${MYSQL_PORT:-13306}
+MYSQL_USER=${MYSQL_USER:-isucon}
+MYSQL_DBNAME=${MYSQL_DBNAME:-isuumo}
+MYSQL_PWD=${MYSQL_PASS:-isucon}
+LANG="C.UTF-8"
 
-cat 0_Schema.sql 1_DummyEstateData.sql 2_DummyChairData.sql | mysql --defaults-file=/dev/null -h $MYSQL_HOST -P $MYSQL_PORT -u $MYSQL_USER $MYSQL_DBNAME
+mysql -h $MYSQL_HOST -P $MYSQL_PORT -u isucon -pisucon isuumo < app/0_Schema.sql
+mysql -h $MYSQL_HOST -P $MYSQL_PORT -u isucon -pisucon isuumo < app/0_Index.sql
+mysql -h $MYSQL_HOST -P $MYSQL_PORT -u isucon -pisucon isuumo < mysql/db/1_DummyEstateData.sql
+mysql -h $MYSQL_HOST -P $MYSQL_PORT -u isucon -pisucon isuumo < mysql/db/2_DummyChairData.sql
