@@ -9,8 +9,7 @@ var logger *zap.SugaredLogger
 
 func initLogger() {
 	conf := zap.NewProductionConfig()
-	conf.EncoderConfig = zap.NewDevelopmentEncoderConfig()
-	conf.Encoding = "console"
+	conf.OutputPaths = []string{"/var/log/isucon/app.log"}
 	conf.Level = zap.NewAtomicLevelAt(zapcore.InfoLevel)
 	l, _ := conf.Build()
 	logger = l.Sugar()
