@@ -12,16 +12,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gchaincl/sqlhooks/v2"
-	"github.com/go-sql-driver/mysql"
+	// "github.com/gchaincl/sqlhooks/v2"
+	_ "github.com/go-sql-driver/mysql"
 	"github.com/gofiber/fiber/v2"
 	"github.com/kellydunn/golang-geo"
 )
 
 // TODO debug remove
-func init() {
-    sql.Register("mysql", sqlhooks.Wrap(&mysql.MySQLDriver{}, &Hooks{}))
-}
+// func init() {
+//     sql.Register("mysql", sqlhooks.Wrap(&mysql.MySQLDriver{}, &Hooks{}))
+// }
 
 func main() {
     // pprof
