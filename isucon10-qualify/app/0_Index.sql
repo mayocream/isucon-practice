@@ -5,6 +5,7 @@ CREATE INDEX `depth_idx` ON `isuumo`.`chair`(`depth`) USING BTREE;
 CREATE INDEX `kind_idx` ON `isuumo`.`chair`(`kind`) USING BTREE;
 CREATE INDEX `color_idx` ON `isuumo`.`chair`(`color`) USING BTREE;
 CREATE INDEX `stock_idx` ON `isuumo`.`chair`(`stock`) USING BTREE;
+CREATE INDEX `chair_popularity_desc_id_idx` ON `isuumo`.`chair`(`popularity_desc`, `id`) USING BTREE;
 
 CREATE INDEX `door_height_idx` ON `isuumo`.`estate`(`door_height`) USING BTREE;
 CREATE INDEX `door_width_idx` ON `isuumo`.`estate`(`door_width`) USING BTREE;
@@ -13,3 +14,4 @@ CREATE INDEX `features_idx` ON `isuumo`.`estate`(`features`) USING BTREE;
 CREATE INDEX `popularity_idx` ON `isuumo`.`estate`(`popularity`) USING BTREE;
 CREATE INDEX `latitude_idx` ON `isuumo`.`estate`(`latitude`) USING BTREE;
 CREATE INDEX `longitude_idx` ON `isuumo`.`estate`(`longitude`) USING BTREE;
+CREATE INDEX `estate_popularity_desc_id_idx` ON `isuumo`.`estate`(`popularity_desc`, `id`) USING BTREE;

@@ -50,7 +50,7 @@ func main() {
 func initialize(c *fiber.Ctx) error {
     sqlDir := filepath.Join("..", "mysql", "db")
     paths := []string{
-        filepath.Join(sqlDir, "0_Schema.sql"),
+        filepath.Join(".", "0_Schema.sql"),
         filepath.Join(".", "0_Index.sql"),
         filepath.Join(sqlDir, "1_DummyEstateData.sql"),
         filepath.Join(sqlDir, "2_DummyChairData.sql"),
@@ -272,7 +272,7 @@ func searchChairs(c *fiber.Ctx) error {
     searchQuery := "SELECT * FROM chair WHERE "
     countQuery := "SELECT COUNT(*) FROM chair WHERE "
     searchCondition := strings.Join(conditions, " AND ")
-    limitOffset := " ORDER BY popularity DESC, id ASC LIMIT ? OFFSET ?"
+    limitOffset := " ORDER BY popularity_desc, id LIMIT ? OFFSET ?"
 
     var res ChairSearchResponse
     err = db.Get(&res.Count, countQuery+searchCondition, params...)
@@ -542,7 +542,7 @@ func searchEstates(c *fiber.Ctx) error {
     searchQuery := "SELECT * FROM estate WHERE "
     countQuery := "SELECT COUNT(*) FROM estate WHERE "
     searchCondition := strings.Join(conditions, " AND ")
-    limitOffset := " ORDER BY popularity DESC, id ASC LIMIT ? OFFSET ?"
+    limitOffset := " ORDER BY popularity_desc, id LIMIT ? OFFSET ?"
 
     var res EstateSearchResponse
     err = db.Get(&res.Count, countQuery+searchCondition, params...)
@@ -608,7 +608,7 @@ func searchRecommendedEstateWithChair(c *fiber.Ctx) error {
     w := chair.Width
     h := chair.Height
     d := chair.Depth
-    query = `SELECT * FROM estate WHERE (door_width >= ? AND door_height >= ?) OR (door_width >= ? AND door_height >= ?) OR (door_width >= ? AND door_height >= ?) OR (door_width >= ? AND door_height >= ?) OR (door_width >= ? AND door_height >= ?) OR (door_width >= ? AND door_height >= ?) ORDER BY popularity DESC, id ASC LIMIT ?`
+    query = `SELECT * FROM estate WHERE (door_width >= ? AND door_height >= ?) OR (door_width >= ? AND door_height >= ?) OR (door_width >= ? AND door_height >= ?) OR (door_width >= ? AND door_height >= ?) OR (door_width >= ? AND door_height >= ?) OR (door_width >= ? AND door_height >= ?) ORDER BY popularity_desc, id LIMIT ?`
     err = db.Select(&estates, query, w, h, w, d, h, w, h, d, d, w, d, h, Limit)
     if err != nil {
         if err == sql.ErrNoRows {
@@ -643,7 +643,7 @@ func searchEstateNazotte(c *fiber.Ctx) error {
 
     b := coordinates.getBoundingBox()
     estatesInBoundingBox := []Estate{}
-    query := `SELECT * FROM estate WHERE latitude <= ? AND latitude >= ? AND longitude <= ? AND longitude >= ? ORDER BY popularity DESC, id ASC`
+    query := `SELECT * FROM estate WHERE latitude <= ? AND latitude >= ? AND longitude <= ? AND longitude >= ? ORDER BY popularity_desc, id`
     err = db.Select(&estatesInBoundingBox, query, b.BottomRightCorner.Latitude, b.TopLeftCorner.Latitude, b.BottomRightCorner.Longitude, b.TopLeftCorner.Longitude)
     if err == sql.ErrNoRows {
         logger.Infof("select * from estate where latitude ...", err)
