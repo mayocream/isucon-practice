@@ -169,3 +169,8 @@ slow_query_log         = 1
 slow_query_log_file    = /var/log/mysql/mysql-slow.log
 ```
 
+## Benchmark
+
+```bash
+docker run --rm --network=host mayocream/isucon:10-quality-bench ./bench --target-url http://127.0.0.1:1234
+```

@@ -17,3 +17,9 @@ install-goaccess:
 	tar -xzvf goaccess-1.5.1.tar.gz
 	cd goaccess-1.5.1/ && ./configure --enable-utf8 && make && make install
 	rm -rf goaccess-1.5.1/ goaccess-1.5.1.tar.gz
+
+bench:
+	docker run --rm --network=host mayocream/isucon:10-quality-bench ./bench --target-url http://127.0.0.1:1234
+
+build-bench:
+	sudo docker build -t isucon10-qualify-bench:dev -f Dockerfile-benchmark .

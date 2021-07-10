@@ -1,0 +1,16 @@
+FROM golang:1.16
+
+RUN apt update && apt install -y python-pip python3-pip git
+
+WORKDIR /data
+
+RUN git clone --depth 1 https://github.com/isucon/isucon10-qualify.git . \
+    && cd initial-data \
+    && pip3 install -r requirements.txt \
+    && go get github.com/orisano/wayt \
+    && make chair_data \
+    && make estate_data
+
+RUN cd bench && make
+
+CMD ["./bench/bench", "--target-url", "$TARGET_SERVER_URL"]

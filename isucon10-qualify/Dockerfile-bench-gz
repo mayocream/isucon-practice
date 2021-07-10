@@ -1,0 +1,16 @@
+FROM ubuntu:18.04
+
+WORKDIR /data
+
+COPY bench.tar.gz .
+
+RUN tar zxvf bench.tar.gz \
+    && rm bench.tar.gz \
+    && chmod -R 777 ./* \
+    && chmod +x bench/bench
+
+WORKDIR /data/bench
+
+ENV TARGET_SERVER_URL=http://127.0.0.1:1323
+
+CMD ["./bench", "--target-url", "$TARGET_SERVER_URL"]

@@ -1,4 +1,4 @@
 all: isuumo
 
 isuumo: *.go
-	go build -o isuumo *.go
+	/usr/local/go/bin/go build -o isuumo *.go
