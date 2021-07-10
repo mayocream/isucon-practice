@@ -14,3 +14,8 @@ services:
       - "./mysql/log:/var/log/mysql"
     ports:
       - "13306:3306"
+
+  redis:
+    image: redis:6.2
+    ports:
+      - "16379:6379"
