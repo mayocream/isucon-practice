@@ -44,6 +44,7 @@ func initRedis() {
 }
 
 func tablesCache() {
+    // cache `chair` table
     {
         query := "SELECT * FROM chair"
         data := make([]*Chair, 0, 3200)
@@ -64,6 +65,7 @@ func tablesCache() {
         }
     }
 
+    // cache `estate` table
     {
         query := "SELECT * FROM estate"
         data := make([]Estate, 0, 3200)
@@ -81,6 +83,7 @@ func tablesCache() {
     }
 }
 
+// cache a DB Row and encode in JSON
 func cacheRow(prefix string, id interface{}, row interface{}, r redis.Pipeliner) {
     val, _ := jsoniter.MarshalToString(row)
     var err error
@@ -95,6 +98,7 @@ func cacheRow(prefix string, id interface{}, row interface{}, r redis.Pipeliner)
     }
 }
 
+// fetch one from cache and decode JSON
 func fetchCacheRow(prefix string, id interface{}, data interface{}) error {
     val, err := redisClient.Get(context.Background(), prefix + cast.ToString(id)).Result()
     if err != nil {
@@ -106,6 +110,7 @@ func fetchCacheRow(prefix string, id interface{}, data interface{}) error {
     return nil
 }
 
+// cache chair table, create indexes for searching
 func cacheChair(arr ...*Chair) error {
     pipe := redisClient.Pipeline()
     for _, row := range arr {
@@ -129,6 +134,9 @@ func cacheChair(arr ...*Chair) error {
         })
         pipe.Set(context.Background(), cacheKey("chair", "popularity", cast.ToString(row.ID)), row.Popularity, 0)
         pipe.Set(context.Background(), cacheKey("chair", "stock", cast.ToString(row.ID)), row.Stock, 0)
+    }
+    if _, err := pipe.Exec(context.Background()); err != nil {
+        logger.Errorf("redis cache chair err: %s", err)
     }
     return nil
 }

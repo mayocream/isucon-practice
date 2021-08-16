@@ -10,13 +10,35 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-const Limit = 20
-const NazotteLimit = 50
+// default conditions
+const (
+	Limit        = 20
+	NazotteLimit = 50
+)
 
-var db *sqlx.DB
-var mySQLConnectionData *MySQLConnectionEnv
-var chairSearchCondition ChairSearchCondition
-var estateSearchCondition EstateSearchCondition
+var (
+	db                    *sqlx.DB
+	mySQLConnectionData   *MySQLConnectionEnv
+	chairSearchCondition  ChairSearchCondition
+	estateSearchCondition EstateSearchCondition
+)
+
+// load search condition
+func init() {
+	jsonText, err := ioutil.ReadFile("../fixture/chair_condition.json")
+	if err != nil {
+		fmt.Printf("%v\n", err)
+		os.Exit(1)
+	}
+	json.Unmarshal(jsonText, &chairSearchCondition)
+
+	jsonText, err = ioutil.ReadFile("../fixture/estate_condition.json")
+	if err != nil {
+		fmt.Printf("%v\n", err)
+		os.Exit(1)
+	}
+	json.Unmarshal(jsonText, &estateSearchCondition)
+}
 
 type InitializeResponse struct {
 	Language string `json:"language"`
@@ -212,20 +234,4 @@ func getEnv(key, defaultValue string) string {
 func (mc *MySQLConnectionEnv) ConnectDB() (*sqlx.DB, error) {
 	dsn := fmt.Sprintf("%v:%v@tcp(%v:%v)/%v", mc.User, mc.Password, mc.Host, mc.Port, mc.DBName)
 	return sqlx.Open("mysql", dsn)
-}
-
-func init() {
-	jsonText, err := ioutil.ReadFile("../fixture/chair_condition.json")
-	if err != nil {
-		fmt.Printf("%v\n", err)
-		os.Exit(1)
-	}
-	json.Unmarshal(jsonText, &chairSearchCondition)
-
-	jsonText, err = ioutil.ReadFile("../fixture/estate_condition.json")
-	if err != nil {
-		fmt.Printf("%v\n", err)
-		os.Exit(1)
-	}
-	json.Unmarshal(jsonText, &estateSearchCondition)
 }
