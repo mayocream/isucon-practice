@@ -62,12 +62,12 @@ type Chair struct {
 }
 
 type ChairSearchResponse struct {
-	Count  int64   `json:"count"`
-	Chairs []Chair `json:"chairs"`
+	Count  int     `json:"count"`
+	Chairs []*Chair `json:"chairs"`
 }
 
 type ChairListResponse struct {
-	Chairs []Chair `json:"chairs"`
+	Chairs []*Chair `json:"chairs"`
 }
 
 //Estate 物件

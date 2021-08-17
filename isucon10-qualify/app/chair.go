@@ -5,51 +5,29 @@ import (
 	"database/sql"
 	"encoding/csv"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/go-redis/redis/v8"
 	"github.com/gofiber/fiber/v2"
-	jsoniter "github.com/json-iterator/go"
 	"github.com/spf13/cast"
+	"github.com/thoas/go-funk"
 )
 
 // optimized, get row
 func getChairDetail(c *fiber.Ctx) error {
-	id, err := strconv.Atoi(c.Params("id"))
-	if err != nil {
+	id := c.Params("id")
+	if _, err := strconv.Atoi(id); err != nil {
 		logger.Errorf("Request parameter \"id\" parse error : %v", err)
 		return c.SendStatus(http.StatusBadRequest)
 	}
 
-	val, err := redisClient.Get(context.Background(), CacheKeyChairID+c.Params("id")).Result()
+	obj, err := getChairCache(id)
 	if err != nil {
-		if err == redis.Nil {
-			logger.Infof("requested id's chair not found : %v", id)
-			return c.SendStatus(http.StatusNotFound)
-		}
-		logger.Errorf("Failed to get the chair from id : %v", err)
-		return c.SendStatus(http.StatusInternalServerError)
+		return c.SendStatus(404)
 	}
-	c.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
-	return c.SendString(val)
-
-	chair := Chair{}
-	query := `SELECT * FROM chair WHERE id = ?`
-	err = db.Get(&chair, query, id)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			logger.Infof("requested id's chair not found : %v", id)
-			return c.SendStatus(http.StatusNotFound)
-		}
-		logger.Errorf("Failed to get the chair from id : %v", err)
-		return c.SendStatus(http.StatusInternalServerError)
-	} else if chair.Stock <= 0 {
-		logger.Infof("requested id's chair is sold out : %v", id)
-		return c.SendStatus(http.StatusNotFound)
-	}
-
-	return c.JSON(chair)
+	return c.JSON(obj)
 }
 
 // optimized
@@ -143,13 +121,12 @@ func postChair(c *fiber.Ctx) error {
 	return c.SendStatus(http.StatusCreated)
 }
 
-// TODO
+// optimized, TEST
 func searchChairs(c *fiber.Ctx) error {
-	conditions := make([]string, 0)
-	params := make([]interface{}, 0)
-
 	pipe := redisClient.Pipeline()
+	ctx := context.Background()
 
+	cmds := make([]*redis.StringSliceCmd, 0)
 	if c.Query("priceRangeId") != "" {
 		chairPrice, err := getRange(chairSearchCondition.Price, c.Query("priceRangeId"))
 		if err != nil {
@@ -166,10 +143,11 @@ func searchChairs(c *fiber.Ctx) error {
 			max = cast.ToString(chairPrice.Max)
 		}
 
-		pipe.ZRangeByScore(context.Background(), cacheKey("chair", "price"), &redis.ZRangeBy{
+		cmd := pipe.ZRangeByScore(ctx, cacheKey("chair", "price"), &redis.ZRangeBy{
 			Min: min,
 			Max: "(" + max,
 		})
+		cmds = append(cmds, cmd)
 	}
 
 	if c.Query("heightRangeId") != "" {
@@ -188,10 +166,11 @@ func searchChairs(c *fiber.Ctx) error {
 			max = cast.ToString(chairHeight.Max)
 		}
 
-		pipe.ZRangeByScore(context.Background(), cacheKey("chair", "height"), &redis.ZRangeBy{
+		cmd := pipe.ZRangeByScore(ctx, cacheKey("chair", "height"), &redis.ZRangeBy{
 			Min: min,
 			Max: "(" + max,
 		})
+		cmds = append(cmds, cmd)
 	}
 
 	if c.Query("widthRangeId") != "" {
@@ -210,10 +189,11 @@ func searchChairs(c *fiber.Ctx) error {
 			max = cast.ToString(chairWidth.Max)
 		}
 
-		pipe.ZRangeByScore(context.Background(), cacheKey("chair", "width"), &redis.ZRangeBy{
+		cmd := pipe.ZRangeByScore(ctx, cacheKey("chair", "width"), &redis.ZRangeBy{
 			Min: min,
 			Max: "(" + max,
 		})
+		cmds = append(cmds, cmd)
 	}
 
 	if c.Query("depthRangeId") != "" {
@@ -232,35 +212,56 @@ func searchChairs(c *fiber.Ctx) error {
 			max = cast.ToString(chairDepth.Max)
 		}
 
-		pipe.ZRangeByScore(context.Background(), cacheKey("chair", "depth"), &redis.ZRangeBy{
+		cmd := pipe.ZRangeByScore(ctx, cacheKey("chair", "depth"), &redis.ZRangeBy{
 			Min: min,
 			Max: "(" + max,
 		})
+		cmds = append(cmds, cmd)
 	}
 
 	if c.Query("kind") != "" {
-
+		cmd := pipe.SMembers(ctx, cacheKey("chair", "kind", c.Query("kind")))
+		cmds = append(cmds, cmd)
 	}
 
 	if c.Query("color") != "" {
-		conditions = append(conditions, "color = ?")
-		params = append(params, c.Query("color"))
+		cmd := pipe.SMembers(ctx, cacheKey("chair", "color", c.Query("color")))
+		cmds = append(cmds, cmd)
 	}
 
 	if c.Query("features") != "" {
-		for _, f := range strings.Split(c.Query("features"), ",") {
-			// conditions = append(conditions, "features LIKE '%?%'")
-			conditions = append(conditions, "features LIKE CONCAT('%', ?, '%')")
-			params = append(params, f)
+		keys := make([]string, 0, 5)
+		for _, feature := range strings.Split(c.Query("features"), ",") {
+			keys = append(keys, cacheKey("chair", "features", featureID(feature)))
+		}
+		cmd := pipe.SInter(ctx, keys...)
+		cmds = append(cmds, cmd)
+	}
+
+	if _, err := pipe.Exec(ctx); err != nil {
+		return err
+	}
+
+	filterIds := make([]string, 0, 20)
+	for _, cmd := range cmds {
+		ids, err := cmd.Result()
+		if err != nil {
+			logger.Errorf("redis exec err: %s", err)
+			return err
+		}
+		if len(ids) > 0 && len(filterIds) > 0 {
+			filterIds = funk.IntersectString(ids, filterIds)
+		}
+		if len(filterIds) == 0 {
+			filterIds = ids
 		}
 	}
 
-	if len(conditions) == 0 {
-		logger.Infof("Search condition not found")
-		return c.SendStatus(http.StatusBadRequest)
-	}
-
-	conditions = append(conditions, "stock > 0")
+	mgetResult, err := redisClient.MGet(ctx, filterIds...).Result()
+	pops := cast.ToIntSlice(mgetResult)
+	sort.SliceStable(filterIds, func(i, j int) bool {
+		return pops[i] > pops[j]
+	})
 
 	page, err := strconv.Atoi(c.Query("page"))
 	if err != nil {
@@ -268,36 +269,28 @@ func searchChairs(c *fiber.Ctx) error {
 		return c.SendStatus(http.StatusBadRequest)
 	}
 
-	perPage, err := strconv.Atoi(c.Query("perPage"))
+	limit, err := strconv.Atoi(c.Query("perPage"))
 	if err != nil {
 		logger.Infof("Invalid format perPage parameter : %v", err)
 		return c.SendStatus(http.StatusBadRequest)
 	}
 
-	searchQuery := "SELECT * FROM chair WHERE "
-	countQuery := "SELECT COUNT(*) FROM chair WHERE "
-	searchCondition := strings.Join(conditions, " AND ")
-	limitOffset := " ORDER BY popularity_desc, id LIMIT ? OFFSET ?"
+	total := len(filterIds)
+	idxStart, idxEnd := GetValidPagination(total, (page - 1) * limit, limit)
+	filterIds = filterIds[idxStart:idxEnd]
 
-	var res ChairSearchResponse
-	err = db.Get(&res.Count, countQuery+searchCondition, params...)
-	if err != nil {
-		logger.Errorf("searchChairs DB execution error : %v", err)
-		return c.SendStatus(http.StatusInternalServerError)
+	res := &ChairSearchResponse{
+		Count: total,
 	}
-
-	chairs := []Chair{}
-	params = append(params, perPage, page*perPage)
-	err = db.Select(&chairs, searchQuery+searchCondition+limitOffset, params...)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return c.JSON(ChairSearchResponse{Count: 0, Chairs: []Chair{}})
+	objs := make([]*Chair, 0, len(filterIds))
+	for _, id := range filterIds {
+		obj, err := getChairCache(id)
+		if err != nil {
+			return err
 		}
-		logger.Errorf("searchChairs DB execution error : %v", err)
-		return c.SendStatus(http.StatusInternalServerError)
+		objs = append(objs, obj)
 	}
-
-	res.Chairs = chairs
+	res.Chairs = objs
 
 	return c.JSON(res)
 }
@@ -315,24 +308,17 @@ func getLowPricedChair(c *fiber.Ctx) error {
 		return err
 	}
 
+	for i, id := range ids {
+		ids[i] = CacheKeyChairID + id
+	}
+
+	chairs := make([]*Chair, 0, len(ids))
 	for _, id := range ids {
-		id = CacheKeyChairID + id
-	}
-
-	rowsResult, err := redisClient.MGet(context.Background(), ids...).Result()
-	if err != nil {
-		logger.Errorf("redis mget stock err: %s", err)
-		return err
-	}
-	rows := cast.ToStringSlice(rowsResult)
-
-	chairs := make([]Chair, 0, len(rows))
-	for _, row := range rows {
-		var chair Chair
-		if err := jsoniter.UnmarshalFromString(row, &chair); err != nil {
-			logger.Errorf("chair Unmarshal err: %s", err)
+		obj, err := getChairCache(id)
+		if err != nil {
+			return err
 		}
-		chairs = append(chairs, chair)
+		chairs = append(chairs, obj)
 	}
 
 	return c.JSON(ChairListResponse{Chairs: chairs})
@@ -346,46 +332,48 @@ type buyParams struct {
 func buyChair(c *fiber.Ctx) error {
 	params := new(buyParams)
 	if err := c.BodyParser(params); err != nil {
-		logger.Infof("post buy chair failed : %v", err)
-		return c.SendStatus(http.StatusInternalServerError)
+		return c.SendStatus(http.StatusBadRequest)
 	}
 
 	if params.Email == "" {
-		logger.Info("post buy chair failed : email not found in request body")
 		return c.SendStatus(http.StatusBadRequest)
 	}
 
-	id, err := strconv.Atoi(c.Params("id"))
-	if err != nil {
-		logger.Infof("post buy chair failed : %v", err)
+	id := c.Params("id")
+	if id == "" {
 		return c.SendStatus(http.StatusBadRequest)
 	}
 
-	stock, err := redisClient.Get(context.Background(), cacheKey("chair", "stock", cast.ToString(id))).Int()
+	if _, err := strconv.Atoi(id); err != nil {
+		return c.SendStatus(http.StatusBadRequest)
+	}
+
+	ctx := context.Background()
+	stock, err := redisClient.Get(ctx, cacheKey("chair", "stock", id)).Int()
 	if err != nil {
-		if err == redis.Nil {
-			return c.SendStatus(http.StatusBadRequest)
-		}
-		logger.Errorf("redis err: %s", err)
-		return c.SendStatus(http.StatusInternalServerError)
+		return c.SendStatus(http.StatusBadRequest)
 	}
 
 	if stock <= 0 {
-		logger.Infof("chair stock <= 0, id: %v", id)
 		return c.SendStatus(http.StatusBadRequest)
 	}
 
-	newStock, err := redisClient.Decr(context.Background(), cacheKey("chair", "stock", cast.ToString(id))).Result()
+	newStock, err := redisClient.Decr(ctx, cacheKey("chair", "stock", id)).Result()
 	if err != nil {
 		logger.Errorf("chair stock decr err: %s, id: %v", err, id)
+		return c.SendStatus(http.StatusBadRequest)
+	}
+
+	obj, err := getChairCache(id)
+	if err != nil {
 		return c.SendStatus(http.StatusBadRequest)
 	}
 
 	if newStock <= 0 {
 		// remove redis cache
 		pipe := redisClient.Pipeline()
-		redisClient.SRem(context.Background(), cacheKey("chair", "color"), id)
-		redisClient.SRem(context.Background(), cacheKey("chair", "kind"), id)
+		redisClient.SRem(context.Background(), cacheKey("chair", "color", obj.Color), id)
+		redisClient.SRem(context.Background(), cacheKey("chair", "kind", obj.Kind), id)
 		redisClient.ZRem(context.Background(), cacheKey("chair", "price"), id)
 		redisClient.ZRem(context.Background(), cacheKey("chair", "height"), id)
 		redisClient.ZRem(context.Background(), cacheKey("chair", "width"), id)
